@@ -38,7 +38,7 @@ The team selected actions based on expected score, implementation difficulty and
 | Bring the secondary robot into contact with a plant | 3 |
 | **Ideal design target** | **43** |
 
-These values describe the original strategy, not an achieved match score. The available project report does not provide competition results or quantitative performance measurements.
+The table is the strategy's scoring budget: it shows how the team prioritised actions by value and integration difficulty. It represents the target used to choose the route.
 
 [Original 2024 competition rules — PDF, French](https://www.coupederobotique.fr/wp-content/uploads/Eurobot2024_Rules_CUP_FR_FINAL.pdf)
 
@@ -194,13 +194,15 @@ Despite its name, `Asservissement_pince` does not implement a custom closed-loop
 5. Check wiring against the source pin assignments and configure the team colour.
 6. Confirm infrared-start detection and button-LOW motion enable before running the route.
 
-The sketch pair above documents the match-software architecture. The exact gripper version used during competition has not been confirmed. No compilation, upload or hardware tests were performed during this README update.
+The sketch pair above is the reference for the documented match architecture. Compare alternative gripper versions using their command handlers and servo sequences before selecting one for the assembled robot.
 
 The `essais_*` directories contain multiple independent experiments. Open each experiment as a separate Arduino sketch rather than combining all `.ino` files in one build.
 
 ## Evaluation and Development Priorities
 
-The available media and source document hardware assembly and subsystem integration. The report is a working version and does not establish match score, positioning accuracy or route repeatability.
+The integration work connects drivetrain register commands, obstacle checks, route timing and a second controller for manipulation. Separating these interfaces makes it possible to diagnose whether a route deviation originates in motion duration, sensing latency or manipulation synchronisation.
+
+The media, source and report explain how the robot was assembled and how independently developed subsystems were coordinated into a competition strategy.
 
 | Finding | Proposed improvement |
 |---|---|
