@@ -1,6 +1,6 @@
 # Farming Mars — Competition Robotics Project
 
-An Arduino-based mobile robot developed for the **2024 French Robotics Cup**, under the “Farming Mars” theme. The system combines a differential-drive chassis, ultrasonic obstacle detection, a servo-operated gripper and a solar-panel arm to execute a predefined competition route.
+Arduino competition robot with differential drive, obstacle sensing and servo manipulation.
 
 **Arduino C/C++ · I²C · Serial Communication · Motor Control · Ultrasonic Sensing · Servo Integration**
 
