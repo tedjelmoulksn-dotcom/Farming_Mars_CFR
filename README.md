@@ -1,289 +1,233 @@
-# Farming Mars — robot pour la Coupe de France de robotique 2024
+# Farming Mars — Competition Robotics Project
 
-Robot mobile autonome à base Arduino, conçu en équipe pour l'édition 2024 de la Coupe de France de robotique (thème « Farming Mars »). Il enchaîne un parcours programmé, s'arrête devant les obstacles, saisit et dépose des plantes avec une pince, et oriente des panneaux solaires.
+An Arduino-based mobile robot developed for the **2024 French Robotics Cup**, under the “Farming Mars” theme. The system combines a differential-drive chassis, ultrasonic obstacle detection, a servo-operated gripper and a solar-panel arm to execute a predefined competition route.
 
-![Table de jeu de la compétition](assets/2024_table-1200x552.png)
+**Arduino C/C++ · I²C · Serial Communication · Motor Control · Ultrasonic Sensing · Servo Integration**
 
-*La table de jeu : 3 m × 2 m, avec les zones de départ, les plantes et les panneaux solaires en bordure.*
+![Competition playing field](assets/2024_table-1200x552.png)
 
-## Sommaire
+*The 3 m × 2 m playing field, including starting areas, plants and solar panels.*
 
-1. [Contexte et cahier des charges](#1-contexte-et-cahier-des-charges)
-2. [Stratégie de match](#2-stratégie-de-match)
-3. [Ma contribution](#3-ma-contribution)
-4. [Architecture du système](#4-architecture-du-système)
-5. [Base roulante et commande des moteurs](#5-base-roulante-et-commande-des-moteurs)
-6. [Détection d'obstacles](#6-détection-dobstacles)
-7. [Pince et protocole de communication](#7-pince-et-protocole-de-communication)
-8. [Logiciel de match](#8-logiciel-de-match)
-9. [Installation et utilisation](#9-installation-et-utilisation)
-10. [Essais, limites et améliorations](#10-essais-limites-et-améliorations)
-11. [Organisation du dépôt](#11-organisation-du-dépôt)
+## Project Overview
 
-## 1. Contexte et cahier des charges
-
-- **Cadre** : projet de robotique du cycle ingénieur, Sup Galilée (Université Sorbonne Paris Nord), année 2023–2024.
-- **Équipe** : huit étudiants répartis en sous-groupes (base roulante, capteurs, robot secondaire puis pince).
-- **Règlement** : [Eurobot 2024, Coupe de France](https://www.coupederobotique.fr/wp-content/uploads/Eurobot2024_Rules_CUP_FR_FINAL.pdf).
-
-Contraintes principales du règlement prises en compte :
-
-| Contrainte | Valeur |
+| Item | Details |
 |---|---|
-| Aire de jeu | 3000 mm × 2000 mm, bordures de 70 mm |
-| Durée d'un match | 100 s |
-| Robot principal | périmètre ≤ 1200 mm au départ, ≤ 1300 mm déployé, hauteur ≤ 350 mm |
-| Robot secondaire | zone de départ 150 mm × 450 mm, hauteur ≤ 150 mm, masse ≤ 1,5 kg |
-| Sécurité | arrêt d'urgence, évitement de l'adversaire, départ par cordon |
-| Équipes | bleue ou jaune, parcours symétriques |
+| Context | Engineering robotics project, Sup Galilée, Université Sorbonne Paris Nord, 2023–2024 |
+| Team | Eight students working across drivetrain, sensors, manipulation and secondary-robot subsystems |
+| Competition | French Robotics Cup 2024 — Farming Mars |
+| Main platform | Arduino-controlled mobile robot with MD25 motor controller and EMG30 motors |
+| Repository | Match sketches, subsystem experiments, integration photos and project documentation |
 
-## 2. Stratégie de match
+The robot uses timed motion sequences and reactive obstacle stopping. Encoder-reading functions are available, but the match route does not use encoder-based position feedback.
 
-L'équipe a retenu les actions les plus rentables au regard de leur difficulté, et réalisables de façon symétrique pour les deux couleurs.
+## My Contribution
 
-| Action | Points visés |
+I worked in the **drivetrain subgroup**, covering the chassis, EMG30 motors, MD25 controller, 12 V power supply and movement commands issued from Arduino through MD25 register writes.
+
+The firmware and system integration are team work. Other subgroups developed the gripper and the Lego secondary robot. The repository retains subsystem experiments to show the progression from individual component tests to integration.
+
+## Competition Strategy
+
+The team selected actions based on expected score, implementation difficulty and the ability to mirror the route for blue and yellow starting positions.
+
+| Planned action | Target points |
 |---|---|
-| Orienter les 6 panneaux solaires | 30 |
-| Récupérer une plante | 5 |
-| Amener la plante en zone de dépôt | 5 |
-| Mettre le robot secondaire au contact de la plante | 3 |
-| **Total visé pour un match idéal** | **43** |
+| Orient six solar panels | 30 |
+| Collect a plant | 5 |
+| Deliver the plant to a deposit area | 5 |
+| Bring the secondary robot into contact with a plant | 3 |
+| **Ideal design target** | **43** |
 
-Ce total est un objectif de conception, pas un score obtenu.
+These values describe the original strategy, not an achieved match score. The available project report does not provide competition results or quantitative performance measurements.
 
-## 3. Ma contribution
+[Original 2024 competition rules — PDF, French](https://www.coupederobotique.fr/wp-content/uploads/Eurobot2024_Rules_CUP_FR_FINAL.pdf)
 
-J'ai travaillé dans le sous-groupe chargé de la **base roulante** : châssis, moteurs EMG30, carte de commande MD25, alimentation 12 V, et commande des déplacements depuis l'Arduino par écriture dans les registres de la MD25.
+## System Architecture
 
-Les programmes de ce dépôt sont un travail d'équipe. Le robot secondaire Lego et la pince ont été réalisés par d'autres sous-groupes.
-
-## 4. Architecture du système
-
-Le robot repose sur deux cartes Arduino. La carte principale décide et se déplace ; la carte de la pince exécute les actions de manipulation et affiche l'état du robot.
+The main controller handles movement, obstacle sensing and route sequencing. A second Arduino executes manipulation commands and drives an OLED status display.
 
 ```mermaid
-flowchart LR
-    subgraph Capteurs
-        US[3 capteurs à ultrasons]
-        IR[Capteur infrarouge]
-        BT[Bouton]
-    end
-    subgraph Principale[Carte principale - Arduino Uno]
-        M[Match_1.0.ino]
-    end
-    subgraph Puissance
-        MD[Carte MD25]
-        MOT[2 moteurs EMG30 à encodeurs]
-    end
-    subgraph Pince[Carte de la pince]
-        P[Match_Pince_Slave_1_0.ino]
-        SV[Servomoteurs de la pince]
-        BS[Servomoteur du bras solaire]
-        OL[Écran OLED SSD1306]
-    end
-    BAT[Batterie 12 V] --> MD
-    US --> M
-    IR --> M
-    BT --> M
-    M -- I2C, adresse 0x58 --> MD
-    MD --> MOT
-    M -- liaison série 9600 bauds --> P
-    P --> SV
-    P --> BS
-    P -- I2C --> OL
+flowchart TD
+    S["Ultrasonic sensors, infrared sensor and button"] --> M["Main Arduino controller"]
+    M -->|"I2C: 0x58"| D["MD25 motor controller"]
+    B["12 V battery"] --> D
+    D --> E["Two EMG30 motors with encoders"]
+    M -->|"Serial: 9600 baud"| G["Gripper Arduino controller"]
+    G --> V["Gripper servos and solar-panel arm"]
+    G --> O["SSD1306 OLED display"]
 ```
 
-| Élément | Détail |
+| Subsystem | Implementation |
 |---|---|
-| Carte principale | Arduino Uno (ATmega328) |
-| Motorisation | 2 moteurs à encodeur EMG30, carte MD25 (double pont en H) |
-| Alimentation | Batterie 12 V |
-| Détection d'obstacles | 3 capteurs à ultrasons |
-| Démarrage et détection de plante | Capteur infrarouge |
-| Manipulation | Pince à servomoteurs du commerce, bras « panneau solaire » |
-| Affichage | Écran OLED SSD1306 |
-| Robot secondaire | Lego, suivi de ligne (capteurs de couleur, d'ultrasons et de contact), programmé en Python — code non inclus |
+| Main controller | Arduino Uno |
+| Drive | Two EMG30 motors with encoders; MD25 dual motor controller |
+| Power | 12 V battery |
+| Obstacle detection | Three ultrasonic sensors |
+| Start and plant sensing | Infrared sensor |
+| Motion enable | Button configured with an internal pull-up |
+| Manipulation | Servo-operated gripper and solar-panel arm |
+| Status display | SSD1306 OLED |
+| Secondary robot | Lego line-following platform; Python code is not included |
 
-Brochage de la carte principale, relevé dans le code :
+### Main-Controller Pin Map
 
-| Fonction | Broche |
+| Function | Pin |
 |---|---|
-| Ultrason 1 (Trig / Echo) | 2 / 3 |
-| Ultrason 2 (Trig / Echo) | 8 / 9 |
-| Ultrason 3 (signal unique) | 10 |
-| Capteur infrarouge | 4 |
-| Bouton | 6 |
+| Ultrasonic sensor 1: TRIG / ECHO | 2 / 3 |
+| Ultrasonic sensor 2: TRIG / ECHO | 8 / 9 |
+| Ultrasonic sensor 3: shared signal | 10 |
+| Infrared sensor | 4 |
+| Button | 6 |
 | LED | 13 |
-| MD25 | bus I2C (SDA / SCL) |
-| Carte de la pince | liaison série (TX / RX) |
+| MD25 interface | I²C SDA / SCL |
+| Gripper interface | Hardware serial TX / RX |
 
-## 5. Base roulante et commande des moteurs
+## Drivetrain and Motor Control
 
-![Dessous de la base roulante](assets/base_roulante_moteurs_capteur_infrarouge.jpg)
+![Drivetrain underside](assets/base_roulante_moteurs_capteur_infrarouge.jpg)
 
-*Dessous du châssis : les deux moteurs EMG30, la carte MD25 et le capteur infrarouge.*
+*Chassis underside showing the drivetrain and infrared sensor.*
 
-Le châssis porte deux roues motrices indépendantes. Le robot avance quand les deux moteurs tournent à la même vitesse et pivote quand un seul est entraîné.
+Arduino communicates with the MD25 through I²C. Separate speed registers command the two motors; matching commands drive forward, while driving one motor with the other stopped produces a pivot.
 
-La carte MD25 se pilote par I2C : l'Arduino écrit une consigne dans un registre par moteur.
-
-| Registre | Adresse | Rôle |
+| Register | Address | Purpose |
 |---|---|---|
-| `SPEED1` | 0x00 | Consigne de vitesse du moteur 1 |
-| `SPEED2` | 0x01 | Consigne de vitesse du moteur 2 |
-| `ENCODERONE` | 0x02 | Compteur de l'encodeur 1 (4 octets) |
-| `ENCODERTWO` | 0x06 | Compteur de l'encodeur 2 (4 octets) |
-| `VOLTREAD` | 0x0A | Tension batterie, en dixièmes de volt |
+| `SPEED1` | `0x00` | Motor 1 speed command |
+| `SPEED2` | `0x01` | Motor 2 speed command |
+| `ENCODERONE` | `0x02` | Encoder 1 count, four bytes |
+| `ENCODERTWO` | `0x06` | Encoder 2 count, four bytes |
+| `VOLTREAD` | `0x0A` | Battery voltage in tenths of a volt |
 
-Consignes utilisées (128 correspond à l'arrêt) :
+The match code uses 128 for stop, 175 for forward motion and 140 for the moving motor during pivots. Functions for reading encoders and battery voltage are present, but do not close the loop on distance or angle.
 
-| Mouvement | Moteur 1 | Moteur 2 |
-|---|---|---|
-| Avancer | 175 | 175 |
-| Pivoter d'un côté | 140 | 128 |
-| Pivoter de l'autre | 128 | 140 |
-| Arrêt | 128 | 128 |
+![MD25 controller](assets/carte_md25_connecteurs.jpg)
 
-**Choix de commande.** Les déplacements sont temporisés : chaque étape dure un temps fixe. Les fonctions `readEncoder()` et `readBatteryVoltage()` sont écrites, mais elles ne sont pas utilisées pour asservir la position. Ce choix simplifie le programme ; il rend la trajectoire sensible à la charge de la batterie et à l'adhérence.
+*MD25 controller and annotated connectors.*
 
-![Carte MD25](assets/carte_md25_connecteurs.jpg)
+## Obstacle Detection and Timing
 
-*Carte MD25 : en vert, les connecteurs utilisés.*
+The three ultrasonic sensors are sampled during motion. Distance is estimated from echo duration:
 
-## 6. Détection d'obstacles
-
-Trois capteurs à ultrasons sont interrogés à chaque itération de la boucle de déplacement. La distance est déduite du temps de vol aller-retour :
-
-```
-distance (cm) = durée de l'écho (µs) × 0,0343 / 2
+```text
+distance_cm = echo_duration_us × 0.0343 / 2
 ```
 
-Si l'une des trois distances passe sous **20 cm**, le robot s'arrête et envoie `S` à la carte de la pince, qui l'affiche.
+When any reported distance is below **20 cm**, the motion code stops the motors and emits the serial command `S`.
 
-Le temps passé à l'arrêt n'est pas compté dans la durée de l'étape : le programme mémorise l'instant du début de pause et retranche la durée totale des pauses du temps écoulé. Après un arrêt, le robot reprend donc l'étape là où il l'avait laissée, au lieu de la raccourcir.
+Obstacle-pause duration is excluded from the current segment's movement time, so the robot resumes the remaining timed motion when the path clears. The overall match clock continues to advance.
 
-![Capteur à ultrasons à l'avant du châssis](assets/capteur_ultrason_chassis.jpg)
+The implementation uses blocking `pulseIn()` calls without an explicitly configured timeout. A missing echo can therefore delay the control loop until the API's timeout; a returned zero is treated as a close obstacle by the current comparison.
 
-*Capteur à ultrasons à l'avant du châssis, sous la pince.*
+![Front ultrasonic sensor](assets/capteur_ultrason_chassis.jpg)
 
-## 7. Pince et protocole de communication
+*Ultrasonic sensor mounted at the front of the chassis.*
 
-La carte principale envoie un caractère sur la liaison série ; la carte de la pince exécute l'action et affiche un message.
+## Manipulation and Serial Protocol
 
-![Liaison entre les deux cartes](assets/schema_liaison_arduino_uno_nano.jpg)
+![Controller interconnection](assets/schema_liaison_arduino_uno_nano.jpg)
 
-*Schéma de la liaison entre la carte principale et la carte de la pince.*
+*Original wiring diagram between the main and manipulation controllers.*
 
-| Caractère | Émis quand | Action de la pince | Affichage |
-|---|---|---|---|
-| `H` | À la mise sous tension | Position par défaut | Homologation |
-| `C` | Cordon de démarrage retiré | — | — |
-| `B` / `J` | Juste après le départ | Bras solaire orienté côté bleu / jaune | Panneaux B / Panneaux J |
-| `G` | Début du parcours | — | Go ! |
-| `S` | Obstacle détecté | — | — |
-| `A` | Plante détectée par l'infrarouge | Séquence « attraper » | Attraper |
-| `D` | Arrivée en zone de dépôt | Séquence « déposer » | Deposer |
-| `O` | Fin d'une étape | Retour en position par défaut | Defaut |
-| `R` | Sur demande | Servomoteurs détachés | Repos |
-| `E` | Fin du parcours | — | End |
+The main controller sends character commands at 9600 baud. The following table describes the handlers in [the OLED-enabled gripper sketch](arduino/Match_Pince_Slave_1_0/Match_Pince_Slave_1_0.ino).
 
-Les caractères `C` et `S` sont émis par la carte principale mais ne déclenchent pas d'action dans la version 1.0 du programme de la pince.
-
-**Séquence « attraper »** : ouverture de la pince, rotation de la base, descente progressive du bras (par pas de 1° toutes les 20 ms pour éviter les à-coups), fermeture, remontée. La carte principale attend 6 s pendant cette séquence.
-
-## 8. Logiciel de match
-
-### Déroulement
-
-```mermaid
-stateDiagram-v2
-    [*] --> Attente : mise sous tension, envoi de H
-    Attente --> Depart : cordon retiré (infrarouge)
-    Depart --> Parcours : envoi de B ou J, puis G
-    Parcours --> Pause : obstacle à moins de 20 cm
-    Pause --> Parcours : voie libre
-    Parcours --> Manipulation : plante détectée ou zone atteinte
-    Manipulation --> Parcours : séquence terminée
-    Parcours --> Fin : 17 étapes terminées ou 90 s écoulées
-    Fin --> [*] : arrêt des moteurs, envoi de E
-```
-
-### Parcours programmé
-
-Le parcours compte 17 étapes. Les lignes droites sont communes aux deux équipes ; les rotations existent en deux versions symétriques. La variable `bleue`, en tête de `Match_1.0.ino`, choisit le parcours.
-
-| Étape | Mouvement | Durée nominale | Action |
-|---|---|---|---|
-| 1 | Avancer | 10 s | Panneaux solaires |
-| 2 | Tourner de 90° | 5 s | |
-| 3 | Avancer | 2 s | |
-| 4 | Tourner de 90° | 5 s | |
-| 5 | Avancer | 1 s | Attraper une plante |
-| 6 | Avancer | 7 s | |
-| 7 | Tourner de 90° | 5 s | |
-| 8 | Avancer | 1 s | Déposer la plante |
-| 9 | Demi-tour | 10 s | |
-| 10 | Avancer | 5 s | |
-| 11 | Tourner de 90° | 5 s | |
-| 12 | Avancer | 6 s | Attraper une plante |
-| 13 | Demi-tour | 10 s | |
-| 14 | Avancer | 6 s | |
-| 15 | Tourner de 90° | 5 s | |
-| 16 | Avancer | 3 s | |
-| 17 | Tourner de 90° | 5 s | Déposer la plante |
-
-### Budget temps
-
-Le programme coupe les moteurs 10 s avant la fin du match, soit à 90 s. Avec les durées nominales ci-dessus, le parcours complet demande environ 91 s de déplacement, auxquelles s'ajoutent les temps de manipulation. Les durées de rotation portent la mention « à définir » dans le code : ce sont des valeurs provisoires, et le parcours complet ne tient pas dans le temps imparti tant qu'elles ne sont pas réduites.
-
-### Programme d'homologation
-
-`Homologation_1.0.ino` est une version réduite : départ au cordon, ligne droite, rotation et arrêt sur obstacle. Elle sert à démontrer l'évitement exigé pour être admis en match.
-
-## 9. Installation et utilisation
-
-1. Installer l'IDE Arduino.
-2. Pour la carte de la pince, installer les bibliothèques `Adafruit GFX` et `Adafruit SSD1306`.
-3. Téléverser `arduino/Match_1.0/` sur la carte principale et `arduino/Match_Pince_Slave_1_0/` sur la carte de la pince.
-4. Régler la variable `bleue` dans `Match_1.0.ino` : `TRUE` pour l'équipe bleue, `FALSE` pour l'équipe jaune.
-5. Poser le robot en zone de départ, mettre le cordon en place, puis le retirer au signal.
-
-> La compilation et le téléversement n'ont pas été rejoués lors de la mise en forme de ce dépôt.
-
-## 10. Essais, limites et améliorations
-
-**Essais.** Le robot a été préparé pour l'homologation et les matchs de l'édition 2024. Le rapport de projet disponible est une version de travail : il ne contient ni résultats de match ni mesures. Aucun score n'est donc annoncé ici.
-
-**Limites identifiées dans le code.**
-
-| Limite | Conséquence | Amélioration possible |
-|---|---|---|
-| Déplacements temporisés | Dérive selon la batterie et le sol | Asservir la distance et l'angle avec les encodeurs, déjà lisibles par `readEncoder()` |
-| Durées de rotation provisoires | Angles approximatifs, budget temps dépassé | Étalonner les rotations, ou les mesurer aux encodeurs |
-| Mesures à ultrasons bloquantes (`pulseIn`) | Boucle ralentie quand rien n'est détecté | Ajouter un délai maximal aux mesures |
-| Même bloc de code recopié pour chaque étape | Programme long (environ 1 650 lignes), corrections à répéter | Une fonction commune « avancer » et une « tourner », paramétrées |
-| Liaison série sans accusé de réception | Une commande perdue passe inaperçue | Faire répondre la pince en fin de séquence |
-
-## 11. Organisation du dépôt
-
-```
-arduino/Match_1.0/                  Programme de match (carte principale, équipes bleue et jaune)
-arduino/Homologation_1.0/           Programme d'homologation (carte principale)
-arduino/Match_Pince_Slave_1_0/      Programme de la pince pour le match (avec écran OLED)
-arduino/Pince_arduino_uno_2_0_0/    Programme de mise au point de la pince, sans écran
-arduino/Asservissement_pince/       Premiers essais de pilotage de la pince
-assets/                             Photos du robot, de la table et schéma de liaison
-```
-
-### Autres photos
-
-| | |
+| Command | Implemented action |
 |---|---|
-| ![Câblage MD25 et moteur](assets/cablage_md25_moteur_emg30.jpg) | ![Robot secondaire](assets/coccinelle_lego_chenilles.jpg) |
-| *Câblage de la MD25 vers un moteur EMG30* | *Robot secondaire Lego sur la table* |
+| `H` | Display the qualification message and set the default servo positions |
+| `G` | Display the start message |
+| `B` / `J` | Position the solar-panel arm for the blue / yellow team |
+| `A` | Execute the plant-grasping sequence |
+| `D` | Execute the plant-release sequence |
+| `O` | Restore default positions |
+| `R` | Detach the servos |
+| `E` | Display the end message |
+| `C` / `S` | Emitted by the main controller; no action handler in this gripper version |
 
-## Crédits et licence
+Grasping opens the gripper, rotates its base, lowers the arm incrementally, closes the gripper and raises the arm. Incremental movements use approximately 20 ms per degree. The main match sketch reserves a fixed 6 s wait for grasping and 3 s for release, rather than waiting for an action-completion acknowledgement.
 
-- Programmes de mise au point de la pince dérivés de l'exemple `servo.ino` d'Adeept (en-tête d'origine conservé).
-- Projet encadré à Sup Galilée et réalisé par un groupe de huit étudiants.
-- Aucune licence n'a été définie pour ce code d'équipe.
+The sketches also print diagnostic text to the same serial interface. The receiver processes individual characters without message framing, which can mix diagnostic output with action commands.
+
+## Match Software
+
+### Start Conditions
+
+The main sketch first detects the infrared start condition and sends the team-specific arm command. The route starts when the button input is LOW. Motion loops continue only while that input remains LOW.
+
+This distinction matters when reproducing the robot: infrared detection alone does not launch the route in the current code.
+
+### Route Sequencing
+
+The program calls **17 route stages**, with mirrored turns for the two team colours. Set `bleue` to `TRUE` for blue or `FALSE` for yellow in the main sketch.
+
+The intended sequence combines solar-panel interaction, forward motion, turns, plant collection and deposit. The code sets provisional 90° and 180° turn durations to 5 s and 10 s.
+
+Motion loops check a **90 s elapsed-time condition**, leaving a nominal 10 s margin within a 100 s match. Blocking sensing and manipulation delays mean this check is not a guarantee of an exact whole-program shutdown at 90 s.
+
+The intended motion schedule already totals about 91 s before manipulation and obstacle pauses. Names and timing constants also differ in places: for example, `path_3_forward_for_2s()` checks `SEC_3`. The full route needs timing reconciliation and calibration before repeatable execution can be claimed.
+
+### Qualification Sketch
+
+[Homologation_1.0.ino](arduino/Homologation_1.0/Homologation_1.0.ino) provides a reduced sequence for start handling, movement, turning and obstacle stopping.
+
+## Repository Map
+
+| Path | Purpose |
+|---|---|
+| [`arduino/Match_1.0/`](arduino/Match_1.0/) | Main-controller match program |
+| [`arduino/Homologation_1.0/`](arduino/Homologation_1.0/) | Reduced qualification program |
+| [`arduino/Match_Pince_Slave_1_0/`](arduino/Match_Pince_Slave_1_0/) | Gripper program with OLED status display |
+| [`arduino/Pince_arduino_uno_2_0_0/`](arduino/Pince_arduino_uno_2_0_0/) | Alternative gripper-development version without OLED |
+| [`arduino/Asservissement_pince/`](arduino/Asservissement_pince/) | Early serial-controlled gripper experiment |
+| [`arduino/essais_base_roulante/`](arduino/essais_base_roulante/) | Ultrasonic, infrared, MD25, encoder and drivetrain integration tests |
+| [`arduino/essais_pince/`](arduino/essais_pince/) | Servo and controller-communication experiments |
+| [`arduino/VERSIONS_PINCE.md`](arduino/VERSIONS_PINCE.md) | Gripper version history, in French |
+| `assets/` | Hardware photos, field illustration and wiring diagrams |
+| `documentation/` | Report, presentation and component-selection note |
+
+Despite its name, `Asservissement_pince` does not implement a custom closed-loop gripper controller. It issues position commands to servos.
+
+## Setup and Use
+
+1. Install the Arduino IDE and select the appropriate board and serial port for each controller.
+2. Install the `Servo`, `Adafruit GFX` and `Adafruit SSD1306` libraries as required by the manipulation sketch. The main sketch uses `Wire` for I²C.
+3. Open and upload the main sketch from `arduino/Match_1.0/`.
+4. Open and upload the OLED-enabled manipulation sketch from `arduino/Match_Pince_Slave_1_0/`.
+5. Check wiring against the source pin assignments and configure the team colour.
+6. Confirm infrared-start detection and button-LOW motion enable before running the route.
+
+The sketch pair above documents the match-software architecture. The exact gripper version used during competition has not been confirmed. No compilation, upload or hardware tests were performed during this README update.
+
+The `essais_*` directories contain multiple independent experiments. Open each experiment as a separate Arduino sketch rather than combining all `.ino` files in one build.
+
+## Evaluation and Development Priorities
+
+The available media and source document hardware assembly and subsystem integration. The report is a working version and does not establish match score, positioning accuracy or route repeatability.
+
+| Finding | Proposed improvement |
+|---|---|
+| Timed movement without encoder-based route feedback | Evaluate encoder-based distance and angle control |
+| Provisional turn durations and mismatched stage constants | Reconcile the route definition and calibrate motion |
+| Blocking sensing and manipulation | Define timeouts and use a non-blocking execution state machine |
+| Repeated motion code across stages and colours | Use parameterized movement functions and a route table |
+| Single-character serial parsing mixed with diagnostic text | Introduce framed messages and separate logging |
+| Fixed waits without completion acknowledgement | Add action acknowledgement and timeout handling |
+| Early drivetrain sketches contain partial encoder reads and truncated negative commands | Use the later register-reading approach and validate command encoding |
+
+The early MD25 encoder experiment reads two bytes per count and uses incorrect register spacing; later integration versions read four bytes from `0x02` and `0x06`. Some early sketches call `Wire.write(-200)` or `Wire.write(-255)`, which transmit truncated byte values rather than signed reverse-speed commands. These files are retained as development history, not recommended operating firmware.
+
+## Documentation
+
+- [Project report — PDF, French](documentation/rapport_projet_robotique_2024.pdf)
+- [Project presentation — PowerPoint, French](documentation/presentation_projet_robotique_2024.pptx)
+- [Sensor and wheel selection note — Word, French](documentation/note_choix_capteurs_et_roues.docx)
+
+## Hardware Gallery
+
+| Drivetrain wiring | Secondary robot |
+|---|---|
+| ![MD25 and EMG30 wiring](assets/cablage_md25_moteur_emg30.jpg) | ![Lego secondary robot](assets/coccinelle_lego_chenilles.jpg) |
+
+## Credits and Licensing
+
+Developed by a team of eight students at Sup Galilée. Tedj El Moulk Sinacer contributed to the drivetrain subgroup.
+
+Some gripper-development sketches derive from Adeept's `servo.ino` example and retain the original attribution. No project-wide licence has been specified for the team code.
